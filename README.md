@@ -103,21 +103,39 @@ O arquivo **`logistics_visualization.ipynb`** lê **`Exercicio recrutamento Fina
 
 Os plots também são salvos em `figures/` como `nb_km_por_veiculo_linhas_regiao.png` e `nb_paradas_por_veiculo_linhas_regiao.png`.
 
-### Figuras exportadas e leitura rápida
+### Figuras exportadas — o que isso vende para o negócio
 
-As imagens seguintes vêm do notebook, com o **cenário padrão** (`VEICULO_PADRAO` na primeira célula — por defeito o primeiro tipo da lista —, **paradas fixas** no gráfico de KM e **KM fixo** no de paradas). Os caminhos são relativos à raiz do repositório.
+Os gráficos vêm do notebook no **cenário padrão** (primeiro veículo da lista — **Risco** —, **80 paradas** no gráfico de km e **250 km** no de paradas; dá para mudar na primeira célula). A ideia não é “bonito demais”: é **enxergar onde o dinheiro escapa** quando você **estica rota** ou **empilha parada**.
 
-#### Custo total × KM rodados
+#### Gráfico de km — onde aparece o salto
 
 ![Custo total versus quilometragem por região](figures/nb_km_por_veiculo_linhas_regiao.png)
 
-Com **paradas fixas**, o efeito dominante do eixo horizontal é o **custo fixo por faixa de km**: ao atravessar outra banda (`KmMin`–`KmMax`), o valor **salta** degrau acima. **Entre** esses saltos, o traço tende a ficar **horizontal**, porque o trecho **variável** do custo não depende do km — só das paradas, aqui constantes. O **afastamento vertical** entre linhas de regiões diferentes reflete, para o **mesmo veículo e mesma faixa de km**, **tarifas de parada diferentes** por região (parcela variável somada ao mesmo patamar fixo).
+Com **paradas travadas**, o gráfico não é uma retinha subindo: é uma **escada**. **Dentro da mesma faixa de km**, rodar mais **quase não mexe no total** (por isso aparecem trechos “chatos”). O barulho está nos **limites entre faixas**: quando o km **passa para o patamar seguinte**, o **custo fixo** recalcula e o total **dá um pulo**.
 
-#### Custo total × número de paradas
+No arquivo que este case usa, para o **Risco** esse tipo de salto entre faixas está na casa de **dezenas de reais por degrau** (ordem de **~40 R$** entre uma banda e outra nos pontos de virada; outros tipos de veículo chegam a **saltos um pouco maiores** no mesmo modelo). Traduzindo para decisão: **não é cada km extra que dói — é cruzar o limite da faixa.** Planejamento de rota e bidding ganham muito quando você sabe **quantos “degraus”** uma operação atravessa.
+
+Sobre as **linhas por região**: mesmo km, mesmo veículo, **altura diferente**. Isso não é bug — é o **custo variável das paradas** (aqui fixo em 80) mudando conforme **onde** você opera. Ou seja: dá para comparar **“quanto EU pago a mais ou a menos”** só pela região, antes mesmo de discutir km.
+
+#### Gráfico de paradas — onde a conta acelera
 
 ![Custo total versus paradas por região](figures/nb_paradas_por_veiculo_linhas_regiao.png)
 
-Com **km fixo**, o custo fixo **não muda** ao longo do eixo das paradas; a curva cresce só pela **parcela variável**, em **três troços** (0–60, 61–90, 91+) com **inclinações diferentes** conforme o valor por parada de cada bloco. A **faixa 61–90** está realçada para bater certo com as regras do modelo. **Curvas mais íngremes** nesse gráfico indicam **custo marginal por parada mais alto** naquele intervalo; comparar regiões mostra onde as paradas pesam mais no total para o mesmo veículo e km fixos.
+Com **km fixo**, o custo fixo **não oscila** — quem manda é **parada**. A curva sobe o tempo todo, mas **a inclinação muda** quando você entra no **61–90** e de novo no **91+**: são **preços por parada diferentes** em cada bloco. Na prática, **operar “pesado” em paradas** significa que você pode estar pagando **bem mais por cada nova parada** do que no começo da curva.
+
+Destaque honesto do modelo: na **faixa do meio (61–90)** a tarifa por parada costuma ser **a mais agressiva** nas regiões caras — por exemplo **SP Interior 2** aparece com valor unitário **bem maior** nesse bloco do que no bloco inicial (0–60). É exatamente por isso que o gráfico **marca essa faixa**: é onde muita gente **descobre tarde** que “mais algumas paradas” viraram **outro preço por parada**.
+
+Comparar regiões aqui é onde o negócio grita. Pegando o **mesmo** cenário do notebook (**250 km**, veículo **Risco**, ir de **0 para 180 paradas**), a **parcela extra só por paradas** vai de algo como **~84 R$** no cenário mais barato (**Nordeste interior**) até **~237 R$** no mais caro (**SP Interior 2**) — **mesma intensidade operacional, custo variável quase três vezes maior** só pela combinação região × tarifas. Quem negocia SLA, roteiriza última milha ou monta tabela de frete **precisa enxergar esse gap**, não só o número final.
+
+#### Sweet spot com o veículo padrão (Risco): mais km, menos dinheiro
+
+Neste workbook o **Risco** usa faixas de km **`1–100`**, **`101–150`**, **`151–200`**, **`201–300`** e **`301+`** (até o teto do modelo). O “pulo” de custo só acontece quando **entras na faixa seguinte** — por isso o melhor negócio em **quilometragem por real gasto em custo fixo** é **usar o fim da faixa**: quanto mais próximo estiver do **teto** (**100, 150, 200, 300 km…**) **sem o atravessar**, mais km você **embute no mesmo patamar** de fixo. Passar o limite só vale a pena quando a operação **realmente precisa** daqueles km a mais.
+
+Do lado das **paradas**, o melhor custo vem de **trabalhar com o menor número possível** e, quando der, **não sair do bloco 0–60**: acima disso o modelo cobra **mais por parada** na maior parte das regiões — e o intervalo **61–90** é onde isso costuma **doer mais**.
+
+Depois de **300 km** já estás na última faixa de fixo do ficheiro: **não há novo degrau de custo fixo** por km — o foco passa a ser **paradas** e **região** (onde a variável mais pesa).
+
+**Resumo:** km te castiga em **pulos** nas fronteiras de faixa; paradas te castigam em **ritmo** — e o **61–90** costuma ser o lugar onde o modelo mais **aperta por parada**. Use o GitHub se quiser reproduzir os números com outros veículos ou constantes.
 
 | Arquivo | Conteúdo |
 |---------|----------|
