@@ -1,3 +1,4 @@
+# Pacotes para o notebook de visualização (Jupyter).
 pandas>=2.0
 openpyxl>=3.1
 matplotlib>=3.8
